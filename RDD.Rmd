@@ -1,0 +1,529 @@
+---
+title: "Regression Discontinuity in Action: Simulated Analysis of QRISK-Based Statin Allocation"
+author: "Vismaya S.D, MSc Biostatistics | Manipal Academy of Higher Education"
+date: "August 2024"
+output:
+  html_document:
+    theme: cosmo
+    toc: true
+    toc_float: true
+    css: styles.css
+  pdf_document:
+    toc: true
+    latex_engine: xelatex
+header-includes:
+  - \usepackage[document]{ragged2e}
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(rdrobust)
+library(ggplot2)
+library(dplyr)
+library(knitr)
+```
+
+# Abstract
+
+This project applies a Sharp Regression Discontinuity Design (RDD) to simulated clinical data where statin treatment is prescribed for patients with QRISK ≥ 10%.
+We aim to estimate the causal effect of treatment on myocardial infarction (MI) events and validate results using covariate balance tests, placebo cutoffs, and bandwidth sensitivity analysis.
+Findings indicate no statistically significant treatment effect near the threshold, with robustness confirmed by placebo and sensitivity checks. The work demonstrates RDD’s value in policy evaluation, even in small datasets.
+
+## 1.Introduction
+
+This project simulates a clinical scenario where patients are assigned statin treatment based on their QRISK cardiovascular risk score. The goal is to estimate the causal effect of treatment using Regression Discontinuity Design (RDD).
+
+### 1.1 Dataset Description
+
+The dataset includes 300 patients aged around 60 years, with QRISK scores ranging from 5% to 15%. According to policy, patients with QRISK ≥ 10% are prescribed statins.
+
+**Variables:**
+
+- `QRISK_Score`: Continuous running variable (threshold at 10%)
+- `Assigned_Treatment`: 1 if treated (QRISK ≥ 10), 0 otherwise
+- `MI_Event`: Binary outcome indicating cardiovascular event
+- `Age`, `Sex`: Additional covariates
+
+### 1.2 Why This Simulates a Policy Threshold
+
+This setup mirrors real-world clinical decision-making where statins are prescribed only if a patient's QRISK score exceeds a policy-defined threshold (10%). This creates a natural cutoff, enabling the use of Regression Discontinuity Design to estimate treatment effects in the absence of randomized trials.
+
+## 2.Exploratory Data Analysis
+
+### 2.1 Load Data
+```{r load-data}
+df <- read.csv("C:\\Users\\Lenovo\\Desktop\\INT\\RDD project\\RDD_DATA.csv")
+```
+
+### 2.2 Summary Statistics and Baseline Characteristics
+```{r summary-stats}
+
+# Summary statistics overview
+library(knitr)
+summary(df)
+library(dplyr)
+library(knitr)
+
+# Baseline summary by treatment group
+df %>%
+  group_by(Assigned_Treatment) %>%
+  summarise(
+    Mean_Age = mean(Age, na.rm = TRUE),
+    Prop_Male = mean(Sex == "Male", na.rm = TRUE),
+    Mean_QRISK = mean(QRISK_Score, na.rm = TRUE),
+    MI_Rate = mean(MI_Event, na.rm = TRUE)
+  ) %>%
+  kable(caption = "Baseline Characteristics by Treatment Group")
+library(ggplot2)
+```
+
+### 2.3 QRISK Score Distribution by Treatment Group
+```{r summary-stats1}
+# Histogram: QRISK Score overall and by Treatment group
+ggplot(df, aes(x = QRISK_Score, fill = factor(Assigned_Treatment))) +
+  geom_histogram(alpha = 0.6, bins = 20, position = "identity") +
+  geom_vline(xintercept = 10, linetype = "dashed", color = "red") +
+  labs(title = "QRISK Score Distribution by Treatment Group",
+       x = "QRISK Score (%)", y = "Count", fill = "Treatment") +
+  theme_minimal()
+```
+
+### 2.4 QRISK Score Boxplot by Treatment Group
+```{r summary-stats2}
+# Boxplot of QRISK Score by Treatment
+boxplot(QRISK_Score ~ Assigned_Treatment, data = df,
+        names = c("No Statin", "Statin"),
+        main = "QRISK Score by Treatment Group", 
+        col = c("orange", "green"),
+        ylab = "QRISK Score (%)")
+abline(h = 10, col = "red", lwd = 2, lty = 2)  # Policy cutoff
+```
+
+### 2.5 Treatment and MI Event Cross-tabulation
+
+```{r summary-stats3}
+
+# Cross-tabulation: Treatment vs MI Event
+table(df$Assigned_Treatment, df$MI_Event)
+```
+
+### 2.6 MI Event Proportions and Barplot by Treatment
+```{r summary-stats4}
+
+# Proportion of MI Events Within Each Treatment Group
+prop.table(table(df$Assigned_Treatment, df$MI_Event), 1)
+
+# Barplot of MI proportions by treatment
+barplot(prop.table(table(df$Assigned_Treatment, df$MI_Event), 1),
+        beside = TRUE, 
+        col = c("lightpink", "lightblue"),
+        legend = c("No MI", "MI"),
+        names.arg = c("No Statin", "Statin"),
+        main = "Proportion of MI Events by Treatment Group",
+        ylab = "Proportion of Patients")
+
+
+
+```
+
+
+
+
+## 3. Treatment Effect Estimation using Regression Discontinuity Design (RDD)
+
+### 3.1 RD Estimation with rdrobust
+
+```{r rdrobust-estimation, message=FALSE, warning=FALSE}
+library(rdrobust)
+rd_result <- rdrobust(y = df$MI_Event, x = df$QRISK, c = 10)
+summary(rd_result)
+```
+---
+
+### 3.2 🧾 Output Summary
+
+- **Estimated RD Effect**: –0.034  
+- **95% Confidence Interval**: [–0.135, 0.092]  
+- **p-value**: 0.710  
+- **Bandwidth used**: 1.344  
+- **Effective Obs**: 37 (left), 44 (right)
+
+---
+
+**➤ Interpretation of RD Results:**
+
+The `rdrobust()` estimate shows a treatment effect of –0.034, indicating a possible reduction in MI incidence among those treated (QRISK ≥ 10%). However, with a p-value of 0.710 and a confidence interval including 0, the effect is not statistically significant.
+
+---
+
+### 3.3 RDD Visualization Plot
+
+```{r rdplot-output, fig.width=6, fig.height=6}
+rdplot(y = df$MI_Event, x = df$QRISK, c = 10,
+       x.label = "QRISK Score", y.label = "MI Event Rate",
+       title = "RDD Plot: MI vs QRISK at Threshold")
+```
+
+*Figure: Local polynomial fit shows potential drop in MI event rate at the QRISK threshold.*
+
+---
+
+### 3.4 Conclusion
+While the plot shows a visible decline in MI events at the QRISK = 10% threshold, the statistical results from rdrobust() do not confirm a significant treatment effect. This may be due to small sample size, low event rates, or inherent noise in the data. Further modeling with covariates or larger datasets may enhance robustness.
+
+## 4. Bandwidth Sensitivity Analysis
+**Purpose:**
+This checks if the RD estimate is robust to different bandwidth choices. A consistent estimate across bandwidths suggests stability and reliability of results.
+
+---
+
+### 4.1 Bandwidth Sensitivity (Narrow Bandwidth: h = 1)
+
+```{r bandwidth-tests}
+a5 <- rdrobust(y = df$MI_Event, x = df$QRISK_Score, c = 10, h = 1)
+summary(a5)
+```
+
+The estimated treatment effect near the threshold is 0.013 (p = 0.224; 95% CI: [−0.052, 0.223]).
+This small, non-significant effect suggests the result is robust, with no strong evidence of discontinuity even when focusing on observations very close to QRISK = 10.
+
+
+
+---
+
+### 4.2 Bandwidth Sensitivity (Narrow Bandwidth: h = 3)
+
+```{r bandwidth-1tests}
+a6 <- rdrobust(y = df$MI_Event, x = df$QRISK_Score, c = 10, h = 3)
+summary(a6)
+```
+**Bandwidth Sensitivity (h = 3):**
+With a wider window, the estimated treatment effect is −0.078 (p = 0.882; 95% CI: [−0.145, 0.124]).
+The effect remains small and non-significant, indicating the findings are robust to bandwidth choice and no meaningful discontinuity is detected.
+
+Although the point estimates differ slightly, both are statistically insignificant. This implies the main result is not overly sensitive to the choice of bandwidth, supporting the robustness of our findings.
+
+---
+
+## 5. Polynomial Order Sensitivity : Robustness Check
+
+**Goal:** Check whether your estimated treatment effect changes a lot when using different polynomial orders for the running variable (linear vs quadratic). This is part of your robustness checks section.
+
+### 5.1 Linear polynomial fit (p = 1)
+```{r poly-sensitivity, message=FALSE, warning=FALSE}
+# Define cutoff (same as in main RDD analysis)
+cutoff <- 10
+
+
+# Linear polynomial fit (p = 1)
+rd_linear <- rdrobust(y = df$MI_Event, x = df$QRISK_Score, c = cutoff, p = 1)
+summary(rd_linear)
+```
+
+### 5.2 Quadratic polynomial fit (p = 2)
+```{r poly-sensitivity1, message=FALSE, warning=FALSE}
+rd_quadratic <- rdrobust(y = df$MI_Event, x = df$QRISK_Score, c = cutoff, p = 2)
+summary(rd_quadratic)
+
+```
+
+**➤ Findings:**
+
+**Linear model (p = 1):**
+- *Estimated RD effect:* *-0.034*  
+- **p-value:** *0.710* (not statistically significant)  
+- *95% CI:* *[-0.135, 0.092]*  
+
+**Quadratic model (p = 2):**
+- *Estimated RD effect:* *-0.020*  
+- **p-value:** *0.837* (not statistically significant)  
+- *95% CI:* *[-0.135, 0.109]*  
+
+
+**Conclusion:** The effect sizes from both models are close to zero and statistically insignificant. The similarity in results indicates that the RDD estimates are robust to polynomial order choice, supporting the stability of our conclusions.
+
+
+## 6. Placebo Tests
+**Purpose:**
+Placebo tests check for spurious discontinuities at fake thresholds. If significant effects are found at places where no treatment rule exists, it may suggest model misspecification or confounding.
+
+### 6.1 Placebo Test at QRISK = 8
+
+```{r placebo-1tests}
+a3 <- rdrobust(y = df$MI_Event, x = df$QRISK_Score, c = 8)
+summary(a3)
+```
+**➤ Statistical Output (from rdrobust):**
+Estimated RD Effect: 0.118
+
+p-value: 0.656
+
+95% CI: [-0.372, 0.591]
+
+**➤ Interpretation:**
+There is no statistically significant jump in the outcome (MI_Event) at QRISK = 8.
+This indicates that no artificial treatment effect is observed when we test the discontinuity at a false cutoff (where no treatment assignment rule exists).
+
+```{r placebo-4tests}
+
+rdplot(y = df$MI_Event, x = df$QRISK_Score, c = 8,
+       title = "Placebo Test at Cutoff 8",
+       x.label = "QRISK", y.label = "MI Event")
+
+```
+
+
+**➤ Visualization Interpretation (RDD Plot at QRISK = 8):**
+The plot shows no sharp change or jump in the MI event rate at the QRISK = 8 point.
+The fitted lines on either side of the threshold appear smooth and continuous, further confirming that no treatment effect exists at this fake cutoff.
+
+**📌 Conclusion:** This supports the validity of the true RDD at QRISK = 10, since placebo cutoffs are behaving as expected (i.e., showing no false effects).
+
+---
+
+### 6.2 Placebo Test at QRISK = 12
+
+
+```{r placebo-2tests}
+
+a4 <- rdrobust(y = df$MI_Event, x = df$QRISK_Score, c = 12)
+summary(a4)
+```
+**➤ Statistical Output (from rdrobust):**
+Estimated RD Effect: 0.108
+
+p-value: 0.111
+
+95% CI: [-0.028, 0.272]
+
+**➤ Interpretation:**
+The estimated effect is still not statistically significant at conventional thresholds (p > 0.05), but slightly closer to the edge.
+Still, it provides no strong evidence of a treatment effect at this fake cutoff.
+```{r placebo-3tests}
+rdplot(y = df$MI_Event, x = df$QRISK_Score, c = 12,
+       title = "Placebo Test at Cutoff 12",
+       x.label = "QRISK", y.label = "MI Event")
+```
+
+**➤ Visualization Interpretation (RDD Plot at QRISK = 12):**
+Again, the graph shows no visible jump in the MI_Event rate at QRISK = 12.
+The regression lines before and after the threshold continue in a visually consistent trend, supporting the absence of an artificial effect.
+
+**📌 Conclusion:** The placebo test at QRISK = 12 also supports that the discontinuity observed at QRISK = 10 is not spurious or due to chance.
+
+## 7. Covariate Balance Test
+
+To validate the assumptions of the Regression Discontinuity Design (RDD), we check whether pre-treatment covariates (such as Age and Sex) are balanced across the treatment cutoff (QRISK = 10).  
+If there is no significant discontinuity in these covariates at the threshold, it strengthens the case that treatment assignment is as-good-as-random near the cutoff.
+
+---
+
+### 7.1 Balance Test for Age
+
+```{r covariate-age-balance}
+# Test for discontinuity in Age
+a1 <- rdrobust(y = df$Age, x = df$QRISK_Score, c = 10)
+summary(a1)
+```
+**➤ Interpretation:**
+The estimated discontinuity (RD Effect) for Age is 1.166 with a p-value of 0.716, which is not statistically significant.
+This suggests that Age is balanced across the treatment threshold. Hence, the RDD design assumption holds for Age.
+
+### 7.2 Visualizing Balance: Age
+**Purpose:**
+This test checks whether the covariate Age is continuous around the QRISK threshold. In a valid Regression Discontinuity Design (RDD), covariates should be balanced at the cutoff. Any significant jump might indicate manipulation or confounding.
+
+```{r vis-age}
+library(ggplot2)
+ggplot(df, aes(x = QRISK_Score, y = Age)) +
+  geom_point(alpha = 0.5) +
+  geom_vline(xintercept = 10, linetype = "dashed", color = "red") +
+  geom_smooth(data = df[df$QRISK_Score < 10, ], method = "lm", se = FALSE, color = "blue") +
+  geom_smooth(data = df[df$QRISK_Score >= 10, ], method = "lm", se = FALSE, color = "green") +
+  labs(title = "Covariate Balance Check – Age by QRISK",
+       x = "QRISK Score", y = "Age")
+```
+
+We tested the continuity of the covariate Age at the QRISK threshold of 10 using the rdrobust() function. The estimated RD effect was 1.166 with a p-value of 0.716, indicating no statistically significant difference in age across the threshold. This suggests that Age is well-balanced and does not show any evidence of manipulation, supporting the assumption that assignment near the threshold is as-good-as-random.
+
+### 7.3 Balance Test for Sex
+```{r covariate-sex-balance}
+# Convert Sex into numeric (Male = 1, Female = 0)
+df$Sex_numeric <- ifelse(df$Sex == "Male", 1, 0)
+
+# Test for discontinuity in Sex
+a2 <- rdrobust(y = df$Sex_numeric, x = df$QRISK_Score, c = 10)
+summary(a2)
+```
+**➤ Interpretation**:
+The estimated RD effect for Sex is −0.154, with a p-value of 0.409 and 95% CI [−0.695, 0.283].
+This means there is no statistically significant jump in gender distribution at the threshold.
+👉 Thus, Sex is balanced across the QRISK = 10 cutoff, supporting the validity of the RDD design with respect to gender.
+
+
+
+
+### 7.4 Visualizing Balance: Sex
+
+```{r vis-sex}
+library(dplyr)
+df$QRISK_Group <- ifelse(df$QRISK_Score < 10, "Left of Cutoff", "Right of Cutoff")
+sex_prop <- df %>%
+  group_by(QRISK_Group) %>%
+  summarise(Proportion_Male = mean(Sex_numeric, na.rm = TRUE))
+
+ggplot(sex_prop, aes(x = QRISK_Group, y = Proportion_Male, fill = QRISK_Group)) +
+  geom_col(width = 0.5) +
+  ylim(0, 1) +
+  labs(title = "Proportion of Males on Either Side of QRISK Threshold",
+       x = "QRISK Group", y = "Proportion Male") +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
+
+The RDD plot for gender (Male,Female) across the QRISK threshold (c = 10) shows no clear discontinuity at the threshold. The proportion of males on either side of the cutoff appears relatively similar, and there is no sharp jump or drop at QRISK = 10.
+
+👉 This means there is no statistically significant jump in gender distribution at the threshold, supporting the assumption that gender is balanced around QRISK = 10
+
+## 8. McCrary Density Test :Manipulation and Sorting Check
+**Goal:**The McCrary density test examines whether the distribution of the running variable (QRISK Score) is continuous at the treatment cutoff of 10.
+
+```{r mccrary-test, message=FALSE, warning=FALSE, fig.width=7, fig.height=5}
+## McCrary Density Test — Manual ggplot version
+library(ggplot2)
+library(rddensity)
+library(dplyr)
+
+cutoff <- 10
+
+# Run McCrary density test
+dens_test <- rddensity(X = df$QRISK_Score, c = cutoff)
+
+# Extract p-value directly from test output
+p_value <- as.numeric(dens_test$test$p_jk[1])  # robust p-value
+
+# Print p-value only
+cat("Robust p-value from McCrary Density Test:", round(p_value, 4), "\n")
+
+
+# Create bins manually
+bin_width <- 0.5
+dens_df <- df %>%
+  mutate(side = ifelse(QRISK_Score < cutoff, "Left of Cutoff", "Right of Cutoff")) %>%
+  group_by(side, bin = cut(QRISK_Score, breaks = seq(min(QRISK_Score), max(QRISK_Score), by = bin_width))) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  mutate(bin_center = as.numeric(sub("\\((.+),.*", "\\1", bin)) + bin_width / 2,
+         density = count / sum(count) / bin_width)
+
+# Plot
+ggplot(dens_df, aes(x = bin_center, y = density, fill = side)) +
+  geom_bar(stat = "identity", alpha = 0.4, color = "black") +
+  geom_vline(xintercept = cutoff, linetype = "dashed", color = "blue", size = 1) +
+  annotate("text", x = cutoff + 0.4, y = max(dens_df$density) * 0.9,
+           label = paste("Cutoff =", cutoff), color = "blue", size = 4) +
+  labs(
+    title = "McCrary Density Test for QRISK Score",
+    subtitle = "Checking for manipulation or sorting around the cutoff",
+    x = "QRISK Score",
+    y = "Density",
+    fill = "Side of Cutoff"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(hjust = 0.5),
+    legend.position = "bottom"
+  )
+
+```
+
+**➤ Interpretation of McCrary Density Test:**
+  In the plot above, the density of scores just below the cutoff (pink bars) and just above the cutoff (blue bars) appear visually similar, with no large discontinuity in height. This visual evidence suggests that there is no substantial manipulation or sorting of QRISK Scores around the threshold. The formal McCrary test statistic and p-value (reported above) further support this finding: with a p-value greater than 0.05, we fail to reject the null hypothesis of density continuity. Therefore, the assumption of no manipulation in the running variable holds, strengthening the credibility of the RDD identification strategy.
+
+
+## 9. Final Conclusion and Policy Implications
+
+### 9.1 Summary of Key Findings
+
+This study applied a Sharp Regression Discontinuity Design (RDD) to evaluate the causal effect of statin allocation based on QRISK ≥ 10% thresholds on myocardial infarction (MI) events. Through rigorous analysis, we found:
+
+**1. No Statistically Significant Treatment Effect**  
+- RD estimate: -0.034 (95% CI: [-0.135, 0.092], p=0.710)  
+- Visual discontinuity in RDD plots was not supported by statistical significance  
+
+**2. Robustness of Results**  
+- Bandwidth sensitivity (h=1/h=3) and polynomial order (linear/quadratic) yielded consistent null effects  
+- Placebo tests at QRISK=8 and QRISK=12 showed no spurious discontinuities (p>0.05)  
+- Covariates (Age/Sex) were balanced at the cutoff (p=0.716 and p=0.409, respectively)  
+- McCrary density test confirmed no manipulation at threshold (p=`r round(as.numeric(dens_test$test$p_jk[1]), 3)`)  
+
+**3. Data Limitations**  
+- Small sample size (N=300) and low MI event rates reduced statistical power  
+- Simulated data may lack real-world complexities (e.g., compliance, measurement error)  
+
+### 9.2 Interpretation
+
+The null findings suggest that:  
+
+- The current QRISK ≥ 10% threshold **may not** significantly reduce MI risk in the immediate vicinity of the cutoff  
+- Alternative thresholds (e.g., QRISK ≥ 12.5%) or additional risk factors should be explored  
+- The policy might need reevaluation with larger datasets or longer follow-up periods  
+
+### 9.3 Final Statement
+
+While this RDD analysis found no significant treatment effect near the QRISK=10% threshold, it demonstrates the value of rigorous quasi-experimental methods for evaluating clinical guidelines. The robust null result serves as a foundation for future research on precision-based statin allocation policies.
+
+
+
+
+### 9.4 Limitations ⚠
+
+- This study uses simulated data; real data may have missingness, measurement error, and unobserved confounders.
+
+- Small sample size and low event rates limit statistical power.
+
+- Assumes no manipulation around the threshold; this requires validation in practice.
+
+---
+
+### 9.4 Future Directions
+
+#### Expand Data Scope
+- Larger samples with higher event rates
+- Real-world observational data with time-to-event analysis
+
+#### Methodological Improvements  
+- Fuzzy RDD to account for imperfect treatment compliance  
+- Machine learning approaches to identify optimal thresholds  
+
+#### Clinical Recommendations  
+- Consider composite endpoints (e.g., MI + stroke)  
+- Explore effect modification by subgroups
+  
+
+
+## 10. References
+
+- BMJ. (2024). *Regression discontinuity design studies: a guide for health researchers.*  
+  Retrieved from https://www.bmj.com/content/384/bmj-2022-072254#
+  
+- ScienceDirect. (2022). *Regression Discontinuity Design article.*  
+  Retrieved from https://www.sciencedirect.com/science/article/pii/S1865921722000642
+
+- Towards Data Science. (2025). *Regression Discontinuity Design: How it works and when to use it.*  
+  Retrieved from https://towardsdatascience.com/regression-discontinuity-design-how-it-works-and-when-to-use-it/
+
+
+
+  
+## Session Information
+
+The following details show the R version and package versions used to generate this report, ensuring reproducibility.
+
+```{r session-info, echo=FALSE}
+sessionInfo()
+```
+
+
