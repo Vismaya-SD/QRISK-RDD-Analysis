@@ -1,7 +1,6 @@
 # QRISK-Based Statin Allocation: An RDD Approach
 
-![RDD Visualization](<img width="1152" height="1152" alt="image" src="https://github.com/user-attachments/assets/90be9ade-11fd-40dd-9ab7-0d95124fab8a" />
-) 
+![RDD Visualization](https://evalf20.classes.andrewheiss.com/example/rdd_files/figure-html/plot-running-discontinuity-mcrary-1.png) 
 
 ## 📌 Overview
 Regression discontinuity design analysis evaluating statin treatment effects at QRISK ≥ 10% threshold using simulated clinical data.
