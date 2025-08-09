@@ -1,0 +1,14 @@
+name: Deploy
+on: push
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: r-lib/actions/setup-r@v1
+      - run: Rscript -e 'rmarkdown::render("RDD.Rmd", output_dir="docs")'
+      - run: mv docs/RDD.html docs/index.html
+      - uses: JamesIves/github-pages-deploy-action@4.1.4
+        with:
+          branch: main
+          folder: docs
